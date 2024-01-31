@@ -1,0 +1,18 @@
+# Cache
+__pycache__/
+*.pyc
+*.py.swp
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+
+# Other
+*.log
+*.sh
+*.tar.gz
+peers.json
+counts.txt
+*.mmdb
