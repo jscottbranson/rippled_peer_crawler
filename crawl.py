@@ -1,50 +1,28 @@
 '''
-Returns a list of details for unique rippled peers that are connected to specified servers.
+Returns a list of details for unique rippled peers that are either connected to specified servers
+or that are found through recursive network crawls using rippled peer ports.
+
+Includes MaxMind integration for geolocating servers (additional subscription required.)
 '''
 
 import requests
 import json
+import logging
+import time
 
 import geoip2.database
 
 
-IPS = [
-"52.32.149.27",
-"54.237.246.60",
-"52.23.250.193",
-"100.24.12.73",
-"3.122.10.154",
-"72.44.58.240",
-"34.221.145.175",
-"35.162.59.23",
-"35.92.8.75",
-"34.230.16.97",
-"3.67.69.93",
-"34.222.89.232",
-"52.27.230.2",
-"52.32.242.103",
-]
-
-IPS_ZAPHOD = [
-"46.4.218.119",
-"95.216.102.182",
-"45.139.107.4",
-"46.4.138.103",
-"195.201.61.31",
-"45.139.107.16",
-"46.4.218.120",
-"45.139.107.6",
-"45.139.107.12",
-"95.216.5.218",
-"116.202.148.26",
-"94.130.221.23",
-"95.216.102.188",
-"116.202.163.130",
-]
-
-IPS = IPS_ZAPHOD
-
+BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP address or URL. If URL, omit "http/s".
+NUM_ITERATIONS = 100 # Set to 0 to only crawl bootstrap address(es)
+LOG_FILE = 'peer_crawl.log'
+LOG_LEVEL = logging.INFO
 OUTPUT_FILE = 'peers.json'
+MAX_MIND_DB = "GeoLite2-City.mmdb"
+
+CRAWLED_PEERS = []
+COLLECTED_IPS = []
+PEER_KEYS = []
 
 
 def write_to_text(peers):
@@ -63,11 +41,11 @@ def lookup_location(peers):
     for peer in peers:
         try:
             if peer['ip']:
-                with geoip2.database.Reader('GeoLite2-City.mmdb') as reader:
+                with geoip2.database.Reader(MAX_MIND_DB) as reader:
                     response = reader.city(peer['ip'])
                     peer['country'] = response.country.iso_code
                     peer['city'] = response.city.name
-        except KeyError:
+        except(KeyError, geoip2.errors.AddressNotFoundError):
             peer['country'] = "Unknown"
             peer['city'] = "Unknown"
     return peers
@@ -79,36 +57,76 @@ def clean_peers(peer_responses):
     '''
     peers = []
     peer_keys = []
+    global COLLECTED_IPS
+    global PEER_KEYS
     for peer in peer_responses:
         try:
             if peer['ip'].startswith( "::ffff:"):
                 peer['ip'] = peer['ip'][7:]
+            if peer['ip'] not in COLLECTED_IPS:
+                COLLECTED_IPS.append(str(peer['ip'] + ":" + str(peer['port'])))
         except KeyError:
             pass
-        if peer['public_key'] not in peer_keys:
+        if peer['public_key'] not in PEER_KEYS:
             peers.append(peer)
-            peer_keys.append(peer['public_key'])
+            PEER_KEYS.append(peer['public_key'])
     return peers
 
 def query_peer_endpoint(server):
-        url = str("https://" + server + ":51235/crawl")
         response = []
         try:
-            response = requests.get(url, verify=False).json()['overlay']['active']
+            url = str("https://" + server + "/crawl")
+            response = requests.get(url, verify=False, timeout=2).json()['overlay']['active']
         except (KeyError, requests.exceptions.RequestException):
-            print("Connection error:", url)
+            logging.error("Connection error: " + url)
         return response
+
+def crawl_batch(ips):
+    '''
+    Create a peer list based on a list of IPs.
+    '''
+    global CRAWLED_PEERS
+    peer_responses = []
+    for server in ips:
+        if server not in CRAWLED_PEERS:
+            logging.info("Preparing to call server: " + server)
+            CRAWLED_PEERS.append(server)
+            peer_responses = peer_responses + query_peer_endpoint(server)
+    return clean_peers(peer_responses)
+
+def iterate_peers():
+    '''
+    Attempt to query newly acquired peers a defined number of times.
+    '''
+    count = 1
+    peers = []
+
+    while count <= NUM_ITERATIONS:
+        count += 1
+        peers = peers + crawl_batch(COLLECTED_IPS)
+    return peers
+
+def start_log():
+    '''
+    Setup log.
+    '''
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=LOG_LEVEL,
+        datefmt="%Y-%m-%d %H:%M:%S",
+        format='%(asctime)s %(levelname)s: %(module)s - %(funcName)s (%(lineno)d): %(message)s',
+    )
 
 def run():
     '''
     Run the program.
     '''
-    peer_responses = []
-    for server in IPS:
-        peer_responses = peer_responses + query_peer_endpoint(server)
-    peer_responses = clean_peers(peer_responses)
-    peer_responses = lookup_location(peer_responses)
-    write_to_text(peer_responses)
+    start_time = time.time()
+    start_log()
+    peers = crawl_batch(BOOTSTRAP_ADDRS) + iterate_peers()
+    peers = lookup_location(peers)
+    write_to_text(peers)
+    logging.warning(str(len(CRAWLED_PEERS)) + " peers crawled in: " + str(round(time.time() - start_time, 1)) + " seconds.")
 
 if __name__ == "__main__":
     run()

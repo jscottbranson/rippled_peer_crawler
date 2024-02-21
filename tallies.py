@@ -2,7 +2,7 @@ from collections import Counter
 import json
 
 INPUT_FILE = 'peers.json'
-OUTPUT_FILE = 'counts.txt'
+OUTPUT_FILE = 'peer_counts.txt'
 
 with open(INPUT_FILE) as peers_raw:
     peers = json.load(peers_raw)
@@ -10,10 +10,14 @@ with open(INPUT_FILE) as peers_raw:
 
 c = Counter()
 v = Counter()
+d = Counter()
+p = Counter()
 for peer in peers:
     try:
         v[peer["version"]] +=1
         c[peer["country"]] +=1
+        d[peer["type"]] +=1
+        p[str(peer["port"])] +=1
     except KeyError:
         pass
 
@@ -21,4 +25,6 @@ open(OUTPUT_FILE, "w").close()
 with open(OUTPUT_FILE, "a") as output:
     output.write(str(c))
     output.write("\n" + str(v))
+    output.write("\n" + str(d))
+    output.write("\n" + str(p))
     output.write("\nTotal Peers: " + str(c.total()))
