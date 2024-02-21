@@ -88,6 +88,7 @@ async def http_query(url, session):
             response = await response.json()
             response = response['overlay']['active']
     except(asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError):
+        logging.warning("Error querying: " + url)
         response = []
     return response
 
@@ -125,8 +126,8 @@ def iterate_peers():
     peers = []
 
     while count <= NUM_ITERATIONS:
-        count += 1
         logging.info("Preparing to complete the: " + str(count) + " iteration with: " + str(len(COLLECTED_IPS)) + " prospective addresses.")
+        count += 1
         peers = peers + crawl_batch(COLLECTED_IPS)
     return peers
 
@@ -140,6 +141,7 @@ def start_log():
         datefmt="%Y-%m-%d %H:%M:%S",
         format='%(asctime)s %(levelname)s: %(module)s - %(funcName)s (%(lineno)d): %(message)s',
     )
+    logging.info("Logging configured successfully.")
 
 def run():
     '''
