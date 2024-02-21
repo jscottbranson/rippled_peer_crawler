@@ -13,6 +13,7 @@ env/
 *.log
 *.sh
 *.tar.gz
-peers.json
-counts.txt
 *.mmdb
+test.py
+peers.json
+peer_counts.txt

@@ -5,21 +5,26 @@ or that are found through recursive network crawls using rippled peer ports.
 Includes MaxMind integration for geolocating servers (additional subscription required.)
 '''
 
-import requests
 import json
 import logging
 import time
 
+import aiohttp
+import asyncio
+
 import geoip2.database
 
 
+# User adjustable variables
 BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP address or URL. If URL, omit "http/s".
-NUM_ITERATIONS = 100 # Set to 0 to only crawl bootstrap address(es)
-LOG_FILE = 'peer_crawl.log'
-LOG_LEVEL = logging.INFO
+NUM_ITERATIONS = 6 # Set to 0 to only crawl bootstrap address(es)
+TIMEOUT = 5 # Seconds to wait for HTTP requests to timeout
 OUTPUT_FILE = 'peers.json'
 MAX_MIND_DB = "GeoLite2-City.mmdb"
+LOG_FILE = 'peer_crawl.log'
+LOG_LEVEL = logging.INFO
 
+# Global variables to track recursive queries
 CRAWLED_PEERS = []
 COLLECTED_IPS = []
 PEER_KEYS = []
@@ -63,8 +68,9 @@ def clean_peers(peer_responses):
         try:
             if peer['ip'].startswith( "::ffff:"):
                 peer['ip'] = peer['ip'][7:]
-            if peer['ip'] not in COLLECTED_IPS:
-                COLLECTED_IPS.append(str(peer['ip'] + ":" + str(peer['port'])))
+            peer_id = str("[" + peer['ip'] + "]:" + str(peer['port']))
+            if peer_id not in COLLECTED_IPS:
+                COLLECTED_IPS.append(peer_id)
         except KeyError:
             pass
         if peer['public_key'] not in PEER_KEYS:
@@ -72,14 +78,27 @@ def clean_peers(peer_responses):
             PEER_KEYS.append(peer['public_key'])
     return peers
 
-def query_peer_endpoint(server):
+async def http_query(url, session):
+    '''
+    Query a peer server.
+    '''
+    try:
+        async with session.get(url, ssl=False, timeout=TIMEOUT) as response:
+            logging.info("Preparing to query server: " + url)
+            response = await response.json()
+            response = response['overlay']['active']
+    except(asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError):
         response = []
-        try:
-            url = str("https://" + server + "/crawl")
-            response = requests.get(url, verify=False, timeout=2).json()['overlay']['active']
-        except (KeyError, requests.exceptions.RequestException):
-            logging.error("Connection error: " + url)
-        return response
+    return response
+
+async def query_multiple_peers(urls):
+    '''
+    Pass multiple requests to http_query.
+    '''
+    async with aiohttp.ClientSession() as session:
+        replies = [http_query(url, session) for url in urls]
+        responses = await asyncio.gather(*replies)
+        return responses
 
 def crawl_batch(ips):
     '''
@@ -87,11 +106,15 @@ def crawl_batch(ips):
     '''
     global CRAWLED_PEERS
     peer_responses = []
-    for server in ips:
-        if server not in CRAWLED_PEERS:
-            logging.info("Preparing to call server: " + server)
-            CRAWLED_PEERS.append(server)
-            peer_responses = peer_responses + query_peer_endpoint(server)
+    peers_to_crawl = []
+    for ip in ips:
+        if ip not in CRAWLED_PEERS:
+            url = str("https://" + ip + "/crawl")
+            peers_to_crawl.append(url)
+            CRAWLED_PEERS.append(ip)
+    responses = asyncio.run(query_multiple_peers(peers_to_crawl))
+    for response in responses:
+        peer_responses = peer_responses + response
     return clean_peers(peer_responses)
 
 def iterate_peers():
@@ -103,6 +126,7 @@ def iterate_peers():
 
     while count <= NUM_ITERATIONS:
         count += 1
+        logging.info("Preparing to complete the: " + str(count) + " iteration with: " + str(len(COLLECTED_IPS)) + " prospective addresses.")
         peers = peers + crawl_batch(COLLECTED_IPS)
     return peers
 
