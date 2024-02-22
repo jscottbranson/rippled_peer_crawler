@@ -15,5 +15,4 @@ env/
 *.tar.gz
 *.mmdb
 test.py
-peers.json
-peer_counts.txt
+peer*.py

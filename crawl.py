@@ -18,6 +18,8 @@ import geoip2.database
 # User adjustable variables
 BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP address or URL. If URL, omit "http/s".
 NUM_ITERATIONS = 6 # Set to 0 to only crawl bootstrap address(es)
+RUN_FOREVER = True # Query the network every SLEEP_TIME seconds indefinitely
+SLEEP_TIME = 15 # Time in seconds to sleep between queries
 TIMEOUT = 5 # Seconds to wait for HTTP requests to timeout
 OUTPUT_FILE = 'peers.json'
 MAX_MIND_DB = "GeoLite2-City.mmdb"
@@ -87,7 +89,7 @@ async def http_query(url, session):
             logging.info("Preparing to query server: " + url)
             response = await response.json()
             response = response['overlay']['active']
-    except(asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError):
+    except(aiohttp.client_exceptions.ClientConnectorError, aiohttp.client_exceptions.ServerDisconnectedError, asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError):
         logging.warning("Error querying: " + url)
         response = []
     return response
@@ -143,16 +145,34 @@ def start_log():
     )
     logging.info("Logging configured successfully.")
 
-def run():
+def query_network():
     '''
     Run the program.
     '''
     start_time = time.time()
-    start_log()
+    print("Preparing to crawl.")
     peers = crawl_batch(BOOTSTRAP_ADDRS) + iterate_peers()
     peers = lookup_location(peers)
     write_to_text(peers)
-    logging.warning(str(len(CRAWLED_PEERS)) + " peers crawled in: " + str(round(time.time() - start_time, 1)) + " seconds.")
+    output_text = str((str(len(CRAWLED_PEERS)) + " peers crawled in: " + str(round(time.time() - start_time, 1)) + " seconds."))
+    logging.warning(output_text)
+    print(output_text)
+
+def run():
+    while True:
+        query_network()
+        if not RUN_FOREVER:
+            break
+        time.sleep(SLEEP_TIME)
+        global CRAWLED_PEERS
+        global COLLECTED_IPS
+        global PEER_KEYS
+        global BOOTSTRAP_ADDRS
+        BOOTSTRAP_ADDRS = COLLECTED_IPS
+        CRAWLED_PEERS = []
+        COLLECTED_IPS = []
+        PEER_KEYS = []
 
 if __name__ == "__main__":
+    start_log()
     run()
