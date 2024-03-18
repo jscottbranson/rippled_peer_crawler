@@ -4,7 +4,6 @@ or that are found through recursive network crawls using rippled peer ports.
 
 Includes MaxMind integration for geolocating servers (additional subscription required.)
 '''
-
 import json
 import logging
 import time
@@ -14,7 +13,9 @@ import hashlib
 import aiohttp
 import asyncio
 
-from dns.resolver import resolve_address
+from dns.asyncresolver import Resolver
+import dns.resolver
+import dns.rrset
 
 import geoip2.database
 
@@ -63,26 +64,27 @@ def lookup_location(peers):
             peer['city'] = "Unknown"
     return peers
 
-def rdns_query(address):
-    '''
-    Query the PTR record for a given IP.
-    '''
+async def dns_query(peer) -> dns.rrset.RRset:
     try:
-        ptr = resolve_address(address)[0]
-        ptr = str(ptr)[:-1]
+        res: dns.resolver.Answer = await Resolver().resolve_address(peer['ip'], rdtype="PTR")
+        ptr = res.rrset
+        peer['ptr'] = str(ptr[0])[:-1]
     except:
-        ptr = "Unknown"
-    return ptr
+        peer['ptr'] = "Unknown"
+    return peer
+
+async def dns_bulk(*peers):
+    coros = [dns_query(peer) for peer in peers]
+    return await asyncio.gather(*coros)
+
+async def rdns_query(peers):
+    peers = await dns_bulk(*peers)
+    return peers
 
 def lookup_rdns(peers):
     '''
     '''
-    for peer in peers:
-        try:
-            peer['ptr'] = rdns_query(peer['ip'])
-            print(peer['ip'], "         ", peer['ptr'])
-        except KeyError:
-            peer['ptr'] = "Unknown"
+    peers = asyncio.run(rdns_query(peers))
     return peers
 
 def to_base58(v):

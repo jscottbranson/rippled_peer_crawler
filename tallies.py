@@ -27,6 +27,7 @@ def run():
     amazon = 0
     ysd = 0
     google = 0
+    zaphod = 0
     ptr_uk = 0
 
     for peer in peers:
@@ -72,7 +73,12 @@ def run():
             pass
         try:
             if peer['ptr'] == "Unknown":
-                ptr_uk+=1
+                ptr_uk +=1
+        except KeyError:
+            pass
+        try:
+            if peer['ptr'].lower() == "zaphod.alloy.ee":
+                zaphod +=1
         except KeyError:
             pass
 
@@ -88,6 +94,7 @@ def run():
         output.write("\n\nAmazon PTR Records: " + str(amazon))
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
+        output.write("\n\nZaphod PTR Records: " + str(zaphod))
         output.write("\n\nTotal Peers: " + str(c.total()))
         output.write("\n\nTotal IPs: " + str(len(ips)))
 
