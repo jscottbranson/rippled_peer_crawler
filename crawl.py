@@ -8,29 +8,35 @@ Includes MaxMind integration for geolocating servers (additional subscription re
 import json
 import logging
 import time
+import base64
+import hashlib
 
 import aiohttp
 import asyncio
+
+from dns.resolver import resolve_address
 
 import geoip2.database
 
 
 # User adjustable variables
-BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP address or URL. If URL, omit "http/s".
-NUM_ITERATIONS = 6 # Set to 0 to only crawl bootstrap address(es)
-RUN_FOREVER = True # Query the network every SLEEP_TIME seconds indefinitely
-SLEEP_TIME = 15 # Time in seconds to sleep between queries
-TIMEOUT = 5 # Seconds to wait for HTTP requests to timeout
-OUTPUT_FILE = 'peers.json'
-MAX_MIND_DB = "GeoLite2-City.mmdb"
-LOG_FILE = 'peer_crawl.log'
-LOG_LEVEL = logging.INFO
+BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+
+NUM_ITERATIONS = 10 # int. Set to 0 to only crawl bootstrap address(es).
+RUN_FOREVER = True # bool. Query the network every SLEEP_TIME seconds indefinitely.
+SLEEP_TIME = 300 # int. Time in seconds to sleep between queries.
+TIMEOUT = 2 # int. Seconds to wait for HTTP requests to timeout.
+OUTPUT_FILE = 'peers.json' # str. Location where peer JSON will be output.
+MAX_MIND_DB = "GeoLite2-City.mmdb" # str. Location where the MMDB is located.
+LOG_FILE = 'peer_crawl.log' # str. Logfile location.
+LOG_LEVEL = logging.WARNING # Log level
+
 
 # Global variables to track recursive queries
 CRAWLED_PEERS = []
-COLLECTED_IPS = []
+COLLECTED_IPS = BOOTSTRAP_ADDRS
 PEER_KEYS = []
-
+CRAWL_ERRORS = []
 
 def write_to_text(peers):
     '''
@@ -57,24 +63,97 @@ def lookup_location(peers):
             peer['city'] = "Unknown"
     return peers
 
+def rdns_query(address):
+    '''
+    Query the PTR record for a given IP.
+    '''
+    try:
+        ptr = resolve_address(address)[0]
+        ptr = str(ptr)[:-1]
+    except:
+        ptr = "Unknown"
+    return ptr
+
+def lookup_rdns(peers):
+    '''
+    '''
+    for peer in peers:
+        try:
+            peer['ptr'] = rdns_query(peer['ip'])
+            print(peer['ip'], "         ", peer['ptr'])
+        except KeyError:
+            peer['ptr'] = "Unknown"
+    return peers
+
+def to_base58(v):
+    __b58chars = 'rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz'
+    __b58base = len(__b58chars)
+
+    long_value = 0
+    for (i, c) in enumerate(v[::-1]):
+        long_value += (256 ** i) * c
+
+    result = ''
+    while long_value >= __b58base:
+        div, mod = divmod(long_value, __b58base)
+        result = __b58chars[mod] + result
+        long_value = div
+    result = __b58chars[long_value] + result
+
+    nPad = 0
+    for c in v:
+        if c == 0:
+            nPad += 1
+        else:
+            break
+
+    return (__b58chars[0] * nPad) + result
+
+def decode_pubkey(peer):
+    '''
+    Decode pubkey_node.
+    '''
+    try:
+        x = base64.b64decode(peer['public_key'])
+        vdata = bytes([28]) + x
+        h = hashlib.sha256(hashlib.sha256(vdata).digest()).digest()
+        key = vdata + h[0:4]
+        peer['public_key'] = to_base58(key)
+    except Exception as e:
+        logging.warning(f"Error normalizing public key: {e}")
+    return peer
+
+def clean_ip(peer):
+    '''
+    Remove `::ffff:` prefix from IPv4 addresses.
+    Add newly discovered IPs to the list for crawling.
+    '''
+    global COLLECTED_IPS
+    try:
+        if peer['ip'].startswith( "::ffff:"):
+            peer['ip'] = peer['ip'][7:]
+        try:
+            peer_id = f"[{peer['ip']}]:{peer['port']}"
+        except KeyError:
+            # If a server reports an IP address without a port, assume 51235.
+            peer_id = f"[{peer['ip']}]:51235"
+        if peer_id not in COLLECTED_IPS:
+            COLLECTED_IPS.append(peer_id)
+    except KeyError:
+        pass
+    return peer
+
+
 def clean_peers(peer_responses):
     '''
     Creates a list of IP addresses with redundant entries and IPv6
     removed. Input is a decoded /crawl endpoint response.
     '''
     peers = []
-    peer_keys = []
-    global COLLECTED_IPS
     global PEER_KEYS
     for peer in peer_responses:
-        try:
-            if peer['ip'].startswith( "::ffff:"):
-                peer['ip'] = peer['ip'][7:]
-            peer_id = str("[" + peer['ip'] + "]:" + str(peer['port']))
-            if peer_id not in COLLECTED_IPS:
-                COLLECTED_IPS.append(peer_id)
-        except KeyError:
-            pass
+        peer = clean_ip(peer)
+        peer = decode_pubkey(peer)
         if peer['public_key'] not in PEER_KEYS:
             peers.append(peer)
             PEER_KEYS.append(peer['public_key'])
@@ -84,13 +163,15 @@ async def http_query(url, session):
     '''
     Query a peer server.
     '''
+    global CRAWL_ERRORS
     try:
         async with session.get(url, ssl=False, timeout=TIMEOUT) as response:
             logging.info("Preparing to query server: " + url)
             response = await response.json()
             response = response['overlay']['active']
-    except(aiohttp.client_exceptions.ClientConnectorError, aiohttp.client_exceptions.ServerDisconnectedError, asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError):
-        logging.warning("Error querying: " + url)
+    except(aiohttp.client_exceptions.ClientOSError, aiohttp.client_exceptions.ClientConnectorError, aiohttp.client_exceptions.ServerDisconnectedError, asyncio.exceptions.TimeoutError, json.decoder.JSONDecodeError) as error:
+        logging.warning("Error: " + str(error) + " querying: " + url)
+        CRAWL_ERRORS.append({'url': url, 'error': error})
         response = []
     return response
 
@@ -112,7 +193,7 @@ def crawl_batch(ips):
     peers_to_crawl = []
     for ip in ips:
         if ip not in CRAWLED_PEERS:
-            url = str("https://" + ip + "/crawl")
+            url = f"https://{ip}/crawl"
             peers_to_crawl.append(url)
             CRAWLED_PEERS.append(ip)
     responses = asyncio.run(query_multiple_peers(peers_to_crawl))
@@ -133,6 +214,36 @@ def iterate_peers():
         peers = peers + crawl_batch(COLLECTED_IPS)
     return peers
 
+def query_network():
+    '''
+    Run the program.
+    '''
+    start_time = time.time()
+    print("Preparing to crawl.")
+    peers = iterate_peers()
+    peers = lookup_location(peers)
+    peers = lookup_rdns(peers)
+    write_to_text(peers)
+    output_text = f"\nRuntime: {round(time.time() - start_time, 2)} seconds.\nConnected to: {len(COLLECTED_IPS) - len(CRAWL_ERRORS)} / {len(COLLECTED_IPS)} potential peers.\nTotal peers identified: {len(peers)}."
+    logging.warning(output_text)
+    print(output_text)
+
+def run():
+    while True:
+        try:
+            query_network()
+            if not RUN_FOREVER:
+                break
+            time.sleep(SLEEP_TIME)
+            global CRAWLED_PEERS
+            global PEER_KEYS
+            global CRAWL_ERRORS
+            CRAWLED_PEERS = []
+            PEER_KEYS = []
+            CRAWL_ERRORS = []
+        except KeyboardInterrupt:
+            break
+
 def start_log():
     '''
     Setup log.
@@ -144,34 +255,6 @@ def start_log():
         format='%(asctime)s %(levelname)s: %(module)s - %(funcName)s (%(lineno)d): %(message)s',
     )
     logging.info("Logging configured successfully.")
-
-def query_network():
-    '''
-    Run the program.
-    '''
-    start_time = time.time()
-    print("Preparing to crawl.")
-    peers = crawl_batch(BOOTSTRAP_ADDRS) + iterate_peers()
-    peers = lookup_location(peers)
-    write_to_text(peers)
-    output_text = str((str(len(CRAWLED_PEERS)) + " peers crawled in: " + str(round(time.time() - start_time, 1)) + " seconds."))
-    logging.warning(output_text)
-    print(output_text)
-
-def run():
-    while True:
-        query_network()
-        if not RUN_FOREVER:
-            break
-        time.sleep(SLEEP_TIME)
-        global CRAWLED_PEERS
-        global COLLECTED_IPS
-        global PEER_KEYS
-        global BOOTSTRAP_ADDRS
-        BOOTSTRAP_ADDRS = COLLECTED_IPS
-        CRAWLED_PEERS = []
-        COLLECTED_IPS = []
-        PEER_KEYS = []
 
 if __name__ == "__main__":
     start_log()
