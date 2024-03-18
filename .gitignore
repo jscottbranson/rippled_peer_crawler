@@ -15,4 +15,4 @@ env/
 *.tar.gz
 *.mmdb
 test.py
-peer*.py
+peer*.txt
