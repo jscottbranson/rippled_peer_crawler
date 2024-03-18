@@ -16,3 +16,4 @@ env/
 *.mmdb
 test.py
 peer*.txt
+peers.json
