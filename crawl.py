@@ -21,7 +21,8 @@ import geoip2.database
 
 
 # User adjustable variables
-BOOTSTRAP_ADDRS = ["45.139.107.12:51235",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+BOOTSTRAP_ADDRESS = ["45.139.107.5:21337",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+DEFAULT_PORT = 21337
 
 NUM_ITERATIONS = 10 # int. Set to 0 to only crawl bootstrap address(es).
 RUN_FOREVER = True # bool. Query the network every SLEEP_TIME seconds indefinitely.
@@ -35,7 +36,7 @@ LOG_LEVEL = logging.WARNING # Log level
 
 # Global variables to track recursive queries
 CRAWLED_PEERS = []
-COLLECTED_IPS = BOOTSTRAP_ADDRS
+COLLECTED_IPS = BOOTSTRAP_ADDRESS
 PEER_KEYS = []
 CRAWL_ERRORS = []
 
@@ -79,12 +80,6 @@ async def dns_bulk(*peers):
 
 async def rdns_query(peers):
     peers = await dns_bulk(*peers)
-    return peers
-
-def lookup_rdns(peers):
-    '''
-    '''
-    peers = asyncio.run(rdns_query(peers))
     return peers
 
 def to_base58(v):
@@ -137,14 +132,13 @@ def clean_ip(peer):
         try:
             peer_id = f"[{peer['ip']}]:{peer['port']}"
         except KeyError:
-            # If a server reports an IP address without a port, assume 51235.
-            peer_id = f"[{peer['ip']}]:51235"
+            # If a server reports an IP address without a port, assume the default.
+            peer_id = f"[{peer['ip']}]:{DEFAULT_PORT}"
         if peer_id not in COLLECTED_IPS:
             COLLECTED_IPS.append(peer_id)
     except KeyError:
         pass
     return peer
-
 
 def clean_peers(peer_responses):
     '''
@@ -224,9 +218,9 @@ def query_network():
     print("Preparing to crawl.")
     peers = iterate_peers()
     peers = lookup_location(peers)
-    peers = lookup_rdns(peers)
+    peers = asyncio.run(rdns_query(peers))
     write_to_text(peers)
-    output_text = f"\nRuntime: {round(time.time() - start_time, 2)} seconds.\nConnected to: {len(COLLECTED_IPS) - len(CRAWL_ERRORS)} / {len(COLLECTED_IPS)} potential peers.\nTotal peers identified: {len(peers)}."
+    output_text = f"\nRuntime: {round(time.time() - start_time, 2)} seconds.\nConnected to: {len(COLLECTED_IPS) - len(CRAWL_ERRORS)} / {len(COLLECTED_IPS)} potential IP addresses.\nTotal public keys identified: {len(peers)}."
     logging.warning(output_text)
     print(output_text)
 

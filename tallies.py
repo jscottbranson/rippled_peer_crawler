@@ -5,6 +5,8 @@ import time
 INPUT_FILE = 'peers.json'
 OUTPUT_FILE = 'peer_counts.txt'
 IPS_FILE = 'peer_ips.txt'
+PUBLIC_KEYS_FILE = 'peer_pubkeys.txt'
+PEERS_FILE = 'peers_summary.txt'
 
 def run():
     '''
@@ -17,6 +19,8 @@ def run():
     except (json.decoder.JSONDecodeError, FileNotFoundError):
         peers = {}
 
+    print(f'There are {len(peers)} peers identified.')
+
     c = Counter()
     v = Counter()
     d = Counter()
@@ -24,13 +28,19 @@ def run():
     ip = Counter()
 
     ips = []
+    peer_data = []
     amazon = 0
     ysd = 0
     google = 0
     zaphod = 0
+    zh_out = []
     ptr_uk = 0
 
     for peer in peers:
+        try:
+            peer_data.append(f"{peer['public_key']}: {peer['ip']}:{peer['port']}")
+        except KeyError:
+            peer_data.append(f"{peer['public_key']}: No IP")
         try:
             if peer['ip'] not in ips:
                 ips.append(peer['ip'])
@@ -79,6 +89,7 @@ def run():
         try:
             if peer['ptr'].lower() == "zaphod.alloy.ee":
                 zaphod +=1
+                zh_out.append(f"{peer['public_key']}    {peer['ip']}   {peer['version']}")
         except KeyError:
             pass
 
@@ -102,6 +113,11 @@ def run():
     with open(IPS_FILE, "a") as output:
         for address in ips:
             output.write(address + "\n")
+
+    open(PEERS_FILE, "w").close()
+    with open(PEERS_FILE, "a") as output:
+        for peer in peer_data:
+            output.write(peer + "\n")
 
 if __name__ == "__main__":
     while True:
