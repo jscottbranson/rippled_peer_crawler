@@ -60,9 +60,11 @@ def lookup_location(peers):
                     response = reader.city(peer['ip'])
                     peer['country'] = response.country.iso_code
                     peer['city'] = response.city.name
-        except(KeyError, geoip2.errors.AddressNotFoundError):
-            peer['country'] = "Unknown"
-            peer['city'] = "Unknown"
+        except(KeyError, FileNotFoundError, geoip2.errors.AddressNotFoundError):
+            peer['country'] = None
+            peer['city'] = None
+        except FileNotFoundError:
+            logging.warning(f"Unable to locate MaxMind DB: {Max_MIND_DB}.")
     return peers
 
 async def dns_query(peer) -> dns.rrset.RRset:
@@ -71,7 +73,7 @@ async def dns_query(peer) -> dns.rrset.RRset:
         ptr = res.rrset
         peer['ptr'] = str(ptr[0])[:-1]
     except:
-        peer['ptr'] = "Unknown"
+        peer['ptr'] = None
     return peer
 
 async def dns_bulk(*peers):

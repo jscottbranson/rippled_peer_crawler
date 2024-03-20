@@ -8,5 +8,5 @@ MaxMind DB must be downloaded manually and extracted.
 2. `pip install -r reqirements.txt`
 3. Check variables in crawl.py and tallies.py
 4. `python3 crawl.py`
-5. `python3 tallies.py`
-6. View the output file specified in tallies.py
+5. (optional) `python3 tallies.py`
+6. Do stuff with the JSON output from crawl.py and/or View the output file specified in tallies.py
