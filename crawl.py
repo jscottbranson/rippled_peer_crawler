@@ -64,7 +64,7 @@ def lookup_location(peers):
             peer['country'] = None
             peer['city'] = None
         except FileNotFoundError:
-            logging.warning(f"Unable to locate MaxMind DB: {Max_MIND_DB}.")
+            logging.warning(f"Unable to locate MaxMind DB: {MAX_MIND_DB}.")
     return peers
 
 async def dns_query(peer) -> dns.rrset.RRset:
