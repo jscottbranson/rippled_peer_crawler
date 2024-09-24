@@ -9,9 +9,11 @@ import logging
 import time
 import base64
 import hashlib
+import ipaddress
 
 import aiohttp
 import asyncio
+
 
 from dns.asyncresolver import Resolver
 import dns.resolver
@@ -21,23 +23,25 @@ import geoip2.database
 
 
 # User adjustable variables
-BOOTSTRAP_ADDRESS = ["45.139.107.5:21337",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+BOOTSTRAP_ADDRESS = ["bacab.alloy.ee:21337", "hubs.xahau.as16089.net:21337"] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
 DEFAULT_PORT = 21337
+#BOOTSTRAP_ADDRESS = ["lco-xrpl-hub1.cabbit.tech:51235",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+#DEFAULT_PORT = 51235
 
 NUM_ITERATIONS = 10 # int. Set to 0 to only crawl bootstrap address(es).
 RUN_FOREVER = True # bool. Query the network every SLEEP_TIME seconds indefinitely.
 SLEEP_TIME = 300 # int. Time in seconds to sleep between queries.
 TIMEOUT = 2 # int. Seconds to wait for HTTP requests to timeout.
-OUTPUT_FILE = 'peers.json' # str. Location where peer JSON will be output.
+OUTPUT_FILE = 'output/peers.json' # str. Location where peer JSON will be output.
 MAX_MIND_DB = "GeoLite2-City.mmdb" # str. Location where the MMDB is located.
-LOG_FILE = 'peer_crawl.log' # str. Logfile location.
+LOG_FILE = 'output/peer_crawl.log' # str. Logfile location.
 LOG_LEVEL = logging.WARNING # Log level
 
 
 # Global variables to track recursive queries
-CRAWLED_PEERS = []
+CRAWLED_PEERS = set()
 COLLECTED_IPS = BOOTSTRAP_ADDRESS
-PEER_KEYS = []
+PEER_KEYS = set()
 CRAWL_ERRORS = []
 
 def write_to_text(peers):
@@ -60,7 +64,7 @@ def lookup_location(peers):
                     response = reader.city(peer['ip'])
                     peer['country'] = response.country.iso_code
                     peer['city'] = response.city.name
-        except(KeyError, FileNotFoundError, geoip2.errors.AddressNotFoundError):
+        except(KeyError, ValueError, geoip2.errors.AddressNotFoundError):
             peer['country'] = None
             peer['city'] = None
         except FileNotFoundError:
@@ -121,6 +125,17 @@ def decode_pubkey(peer):
     except Exception as e:
         logging.warning(f"Error normalizing public key: {e}")
     return peer
+def sort_ip4_ip6(peer):
+    '''
+    Check if a peer address is IPv4 or IPv6
+    '''
+    try:
+        ip = ipaddress.ip_address(peer['ip'])
+        if isinstance(ip, ipaddress.IPv6Address):
+            peer['ip'] = f'[{peer['ip']}]'
+    except ValueError:
+        pass
+    return peer
 
 def clean_ip(peer):
     '''
@@ -131,11 +146,12 @@ def clean_ip(peer):
     try:
         if peer['ip'].startswith( "::ffff:"):
             peer['ip'] = peer['ip'][7:]
+        peer = sort_ip4_ip6(peer)
         try:
-            peer_id = f"[{peer['ip']}]:{peer['port']}"
+            peer_id = f"{peer['ip']}:{peer['port']}"
         except KeyError:
             # If a server reports an IP address without a port, assume the default.
-            peer_id = f"[{peer['ip']}]:{DEFAULT_PORT}"
+            peer_id = f"{peer['ip']}:{DEFAULT_PORT}"
         if peer_id not in COLLECTED_IPS:
             COLLECTED_IPS.append(peer_id)
     except KeyError:
@@ -154,7 +170,7 @@ def clean_peers(peer_responses):
         peer = decode_pubkey(peer)
         if peer['public_key'] not in PEER_KEYS:
             peers.append(peer)
-            PEER_KEYS.append(peer['public_key'])
+            PEER_KEYS.add(peer['public_key'])
     return peers
 
 async def http_query(url, session):
@@ -193,7 +209,7 @@ def crawl_batch(ips):
         if ip not in CRAWLED_PEERS:
             url = f"https://{ip}/crawl"
             peers_to_crawl.append(url)
-            CRAWLED_PEERS.append(ip)
+            CRAWLED_PEERS.add(ip)
     responses = asyncio.run(query_multiple_peers(peers_to_crawl))
     for response in responses:
         peer_responses = peer_responses + response
@@ -236,8 +252,8 @@ def run():
             global CRAWLED_PEERS
             global PEER_KEYS
             global CRAWL_ERRORS
-            CRAWLED_PEERS = []
-            PEER_KEYS = []
+            CRAWLED_PEERS = set()
+            PEER_KEYS = set()
             CRAWL_ERRORS = []
         except KeyboardInterrupt:
             break

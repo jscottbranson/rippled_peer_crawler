@@ -2,11 +2,11 @@ from collections import Counter
 import json
 import time
 
-INPUT_FILE = 'peers.json'
-OUTPUT_FILE = 'peer_counts.txt'
-IPS_FILE = 'peer_ips.txt'
-PUBLIC_KEYS_FILE = 'peer_pubkeys.txt'
-PEERS_FILE = 'peers_summary.txt'
+INPUT_FILE = 'output/peers.json'
+OUTPUT_FILE = 'output/peer_counts.txt'
+IPS_FILE = 'output/peer_ips.txt'
+PUBLIC_KEYS_FILE = 'output/peer_pubkeys.txt'
+PEERS_FILE = 'output/peers_summary.txt'
 
 def run():
     '''
@@ -90,10 +90,10 @@ def run():
         except(KeyError, TypeError):
             pass
         try:
-            if peer['ptr']:
-                pass
+            if not peer['ptr']:
+                ptr_uk +=1
         except(KeyError, TypeError):
-            ptr_uk +=1
+                ptr_uk +=1
         try:
             if peer['ptr'].lower() == "zaphod.alloy.ee":
                 zaphod +=1
@@ -107,16 +107,17 @@ def run():
     with open(OUTPUT_FILE, "a") as output:
         output.write("Server Country:\n" + str(c))
         output.write("\n\nServer Version:\n" + str(v))
+        output.write(f"\nTotal versions reported: {sum(v.values())}")
         output.write("\n\nConnection Direction:\n" + str(d))
         output.write("\n\nPeer Port:\n" + str(p))
-        output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nUnknown PTR Records: " + str(ptr_uk))
         output.write("\n\nAmazon PTR Records: " + str(amazon))
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
         output.write("\n\nZaphod PTR Records: " + str(zaphod))
-        output.write("\n\nTotal Peers: " + str(c.total()))
+        output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nTotal IPs: " + str(len(ips)))
+        output.write("\n\nUnique public keys: " + str(c.total()))
 
     open(IPS_FILE, "w").close()
     with open(IPS_FILE, "a") as output:

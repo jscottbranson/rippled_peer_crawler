@@ -1,6 +1,9 @@
 # rippled_peer_crawler
 Crawls rippled servers and tallies information on connected peers, including geolocating IP addresses using a MaxMind City database.
 
+## Requires
+`pip install aiohttp dnspython geoip2`
+
 MaxMind DB must be downloaded manually and extracted.
 
 ## Running the program
