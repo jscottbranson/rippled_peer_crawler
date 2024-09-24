@@ -2,11 +2,11 @@ from collections import Counter
 import json
 import time
 
-INPUT_FILE = 'peers.json'
-OUTPUT_FILE = 'peer_counts.txt'
-IPS_FILE = 'peer_ips.txt'
-PUBLIC_KEYS_FILE = 'peer_pubkeys.txt'
-PEERS_FILE = 'peers_summary.txt'
+INPUT_FILE = 'output/peers.json'
+OUTPUT_FILE = 'output/peer_counts.txt'
+IPS_FILE = 'output/peer_ips.txt'
+PUBLIC_KEYS_FILE = 'output/peer_pubkeys.txt'
+PEERS_FILE = 'output/peers_summary.txt'
 
 def run():
     '''
@@ -29,6 +29,7 @@ def run():
 
     ips = []
     peer_data = []
+    no_ip = 0
     amazon = 0
     ysd = 0
     google = 0
@@ -40,12 +41,19 @@ def run():
         try:
             peer_data.append(f"{peer['public_key']}: {peer['ip']}:{peer['port']}")
         except KeyError:
-            peer_data.append(f"{peer['public_key']}: No IP")
+            try:
+                peer_data.append(f"{peer['public_key']}: {peer['ip']} no port")
+            except KeyError:
+                try:
+                    peer_data.append(f"{peer['public_key']}: {peer['port']} no IP")
+                except KeyError:
+                    peer_data.append(f"{peer['public_key']}: no IP no port")
+
         try:
             if peer['ip'] not in ips:
                 ips.append(peer['ip'])
         except KeyError:
-            pass
+            no_ip +=1
         try:
             v[peer["version"]] +=1
         except KeyError:
@@ -69,28 +77,28 @@ def run():
         try:
             if peer['ptr'][-13:] == "amazonaws.com":
                 amazon +=1
-        except KeyError:
+        except(KeyError, TypeError):
             pass
         try:
             if peer['ptr'][-14:] == "your-server.de":
                 ysd +=1
-        except KeyError:
+        except(KeyError, TypeError):
             pass
         try:
             if peer['ptr'][-21:] == "googleusercontent.com":
                 google +=1
-        except KeyError:
+        except(KeyError, TypeError):
             pass
         try:
-            if peer['ptr'] == "Unknown":
+            if not peer['ptr']:
                 ptr_uk +=1
-        except KeyError:
-            pass
+        except(KeyError, TypeError):
+                ptr_uk +=1
         try:
             if peer['ptr'].lower() == "zaphod.alloy.ee":
                 zaphod +=1
                 zh_out.append(f"{peer['public_key']}    {peer['ip']}   {peer['version']}")
-        except KeyError:
+        except(KeyError, TypeError, AttributeError):
             pass
 
 
@@ -99,6 +107,7 @@ def run():
     with open(OUTPUT_FILE, "a") as output:
         output.write("Server Country:\n" + str(c))
         output.write("\n\nServer Version:\n" + str(v))
+        output.write(f"\nTotal versions reported: {sum(v.values())}")
         output.write("\n\nConnection Direction:\n" + str(d))
         output.write("\n\nPeer Port:\n" + str(p))
         output.write("\n\nUnknown PTR Records: " + str(ptr_uk))
@@ -106,8 +115,9 @@ def run():
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
         output.write("\n\nZaphod PTR Records: " + str(zaphod))
-        output.write("\n\nTotal Peers: " + str(c.total()))
+        output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nTotal IPs: " + str(len(ips)))
+        output.write("\n\nUnique public keys: " + str(c.total()))
 
     open(IPS_FILE, "w").close()
     with open(IPS_FILE, "a") as output:
