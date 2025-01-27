@@ -23,10 +23,10 @@ import geoip2.database
 
 
 # User adjustable variables
-BOOTSTRAP_ADDRESS = ["bacab.alloy.ee:21337", "hubs.xahau.as16089.net:21337"] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
-DEFAULT_PORT = 21337
-#BOOTSTRAP_ADDRESS = ["lco-xrpl-hub1.cabbit.tech:51235",] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
-#DEFAULT_PORT = 51235
+#BOOTSTRAP_ADDRESS = ["bacab.alloy.ee:21337", "hubs.xahau.as16089.net:21337"] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+#DEFAULT_PORT = 21337
+BOOTSTRAP_ADDRESS = ["167.235.169.210:51235", "141.95.168.207:51235"] # Can be an IP or URL. Include port. Enclose IPv6 in brackets: "[::]:port". Omit "https".
+DEFAULT_PORT = 51235
 
 NUM_ITERATIONS = 10 # int. Set to 0 to only crawl bootstrap address(es).
 RUN_FOREVER = True # bool. Query the network every SLEEP_TIME seconds indefinitely.

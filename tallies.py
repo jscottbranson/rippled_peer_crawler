@@ -34,6 +34,7 @@ def run():
     ysd = 0
     google = 0
     zaphod = 0
+    edu = 0
     zh_out = []
     ptr_uk = 0
 
@@ -90,6 +91,11 @@ def run():
         except(KeyError, TypeError):
             pass
         try:
+            if peer['ptr'][-4:] == ".edu":
+                edu +=1
+        except(KeyError, TypeError):
+            pass
+        try:
             if not peer['ptr']:
                 ptr_uk +=1
         except(KeyError, TypeError):
@@ -115,6 +121,7 @@ def run():
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
         output.write("\n\nZaphod PTR Records: " + str(zaphod))
+        output.write("\n\n.edu PTR Records: " + str(edu))
         output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nTotal IPs: " + str(len(ips)))
         output.write("\n\nUnique public keys: " + str(c.total()))
