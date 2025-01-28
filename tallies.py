@@ -25,10 +25,12 @@ def run():
     v = Counter()
     d = Counter()
     p = Counter()
+    k = Counter()
     ip = Counter()
 
-    ips = []
     peer_data = []
+    ips = []
+    reused_ips = 0
     no_ip = 0
     amazon = 0
     ysd = 0
@@ -52,6 +54,8 @@ def run():
         try:
             if peer['ip'] not in ips:
                 ips.append(peer['ip'])
+            elif peer['ip'] in ips:
+                reused_ips +=1
         except KeyError:
             no_ip +=1
         try:
@@ -71,9 +75,15 @@ def run():
         except KeyError:
             pass
         try:
+            k[peer["public_key"]] +=1
+        except KeyError:
+            pass
+        try:
             ip[peer['ip']] +=1
         except KeyError:
             pass
+
+        # Count PTR Records
         try:
             if peer['ptr'][-13:].lower() == "amazonaws.com":
                 amazon +=1
@@ -114,15 +124,17 @@ def run():
         output.write(f"\nTotal versions reported: {sum(v.values())}")
         output.write("\n\nConnection Direction:\n" + str(d))
         output.write("\n\nPeer Port:\n" + str(p))
-        output.write("\n\nNo PTR Record: " + str(ptr_uk))
         output.write("\n\nAmazon PTR Records: " + str(amazon))
-        output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
-        output.write("\n\nGoogle PTR Records: " + str(google))
-        output.write("\n\nHostinger PTR Records: " + str(hstgr))
-        output.write("\n\n.edu PTR Records: " + str(edu))
-        output.write("\n\nUnknown IP Address: " + str(no_ip))
-        output.write("\n\nTotal IPs: " + str(len(ips)))
-        output.write("\n\nUnique public keys: " + str(c.total()))
+        output.write("\nYour-Server.de PTR Records: " + str(ysd))
+        output.write("\nGoogle PTR Records: " + str(google))
+        output.write("\nHostinger PTR Records: " + str(hstgr))
+        output.write("\n.edu PTR Records: " + str(edu))
+        output.write("\nNo PTR Record: " + str(ptr_uk))
+        output.write("\n\nUnique countries: " + str(len(c.keys())))
+        output.write("\n\nServers without published IP Address: " + str(no_ip))
+        output.write("\nServers sharing an IP address: " + str(reused_ips))
+        output.write("\nUnique IPs: " + str(len(ips)))
+        output.write("\n\nUnique public keys: " + str(k.total()))
 
     open(IPS_FILE, "w").close()
     with open(IPS_FILE, "a") as output:
