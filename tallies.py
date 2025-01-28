@@ -33,9 +33,7 @@ def run():
     amazon = 0
     ysd = 0
     google = 0
-    zaphod = 0
     edu = 0
-    zh_out = []
     ptr_uk = 0
 
     for peer in peers:
@@ -76,36 +74,30 @@ def run():
         except KeyError:
             pass
         try:
-            if peer['ptr'][-13:] == "amazonaws.com":
+            if peer['ptr'][-13:].lower() == "amazonaws.com":
                 amazon +=1
         except(KeyError, TypeError):
             pass
         try:
-            if peer['ptr'][-14:] == "your-server.de":
+            if peer['ptr'][-14:].lower() == "your-server.de":
                 ysd +=1
         except(KeyError, TypeError):
             pass
         try:
-            if peer['ptr'][-21:] == "googleusercontent.com":
+            if peer['ptr'][-21:].lower() == "googleusercontent.com":
                 google +=1
         except(KeyError, TypeError):
             pass
         try:
-            if peer['ptr'][-4:] == ".edu":
+            if peer['ptr'][-4:].lower() == ".edu":
                 edu +=1
-        except(KeyError, TypeError):
+        except(KeyError, TypeError, AttributeError):
             pass
         try:
             if not peer['ptr']:
                 ptr_uk +=1
         except(KeyError, TypeError):
                 ptr_uk +=1
-        try:
-            if peer['ptr'].lower() == "zaphod.alloy.ee":
-                zaphod +=1
-                zh_out.append(f"{peer['public_key']}    {peer['ip']}   {peer['version']}")
-        except(KeyError, TypeError, AttributeError):
-            pass
 
 
 
@@ -120,7 +112,6 @@ def run():
         output.write("\n\nAmazon PTR Records: " + str(amazon))
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
-        output.write("\n\nZaphod PTR Records: " + str(zaphod))
         output.write("\n\n.edu PTR Records: " + str(edu))
         output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nTotal IPs: " + str(len(ips)))
