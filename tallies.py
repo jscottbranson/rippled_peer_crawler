@@ -33,6 +33,7 @@ def run():
     amazon = 0
     ysd = 0
     google = 0
+    hstgr = 0
     edu = 0
     ptr_uk = 0
 
@@ -89,6 +90,11 @@ def run():
         except(KeyError, TypeError):
             pass
         try:
+            if peer['ptr'][-11:].lower() == "hstgr.cloud":
+                hstgr +=1
+        except(KeyError, TypeError):
+            pass
+        try:
             if peer['ptr'][-4:].lower() == ".edu":
                 edu +=1
         except(KeyError, TypeError, AttributeError):
@@ -108,10 +114,11 @@ def run():
         output.write(f"\nTotal versions reported: {sum(v.values())}")
         output.write("\n\nConnection Direction:\n" + str(d))
         output.write("\n\nPeer Port:\n" + str(p))
-        output.write("\n\nUnknown PTR Records: " + str(ptr_uk))
+        output.write("\n\nNo PTR Record: " + str(ptr_uk))
         output.write("\n\nAmazon PTR Records: " + str(amazon))
         output.write("\n\nYour-Server.de PTR Records: " + str(ysd))
         output.write("\n\nGoogle PTR Records: " + str(google))
+        output.write("\n\nHostinger PTR Records: " + str(hstgr))
         output.write("\n\n.edu PTR Records: " + str(edu))
         output.write("\n\nUnknown IP Address: " + str(no_ip))
         output.write("\n\nTotal IPs: " + str(len(ips)))
